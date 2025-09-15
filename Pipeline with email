@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+    environment{
+        sonar_qube= 'Mysonar'
+    }
+    tools{
+        maven 'Mymaven'
+    }
+    stages {
+        stage('clearWs') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage('code-checkout') {
+            steps {
+              git 'https://github.com/Srinurisking/dockerwebapp.git'
+            }
+        }
+        stage('build') {
+            steps {
+                sh'mvn clean install'
+                sh'cp -r target Docker-app'
+            }
+        }
+        stage('SonarQube Analysis') {
+    steps {
+        withSonarQubeEnv('Mysonar') {
+            sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=MyProject'
+        }
+    }
+}
+        stage('Quality gates') {
+            steps {
+                waitForQualityGate abortPipeline: false, credentialsId: 'Mysonartoken'
+            }
+        }
+        stage('Docker image') {
+            steps {
+                sh 'docker build -t dbimage Docker-db'
+                sh 'docker build -t appimage Docker-app'
+            }
+        }
+        stage('Docker stack') {
+            steps {
+                sh 'docker stack deploy javaapp --compose-file=compose.yml'
+            }
+        }
+    }
+        post {
+            always{
+                mail to: "mylapalli.srinu1999@gmail.com",
+                subject: "Pipeline status",
+                body: "${currentBuild.currentResult}:* Job ${env.JOB_NAME}\n build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}"
+            }
+        }
+}
